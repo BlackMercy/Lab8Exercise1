@@ -2,9 +2,9 @@ package th.ac.tu.siit.its333.lab8exercise1;
 
 import android.content.Intent;
 import android.os.AsyncTask;
+import android.os.Bundle;
 import android.os.Handler;
 import android.support.v7.app.ActionBarActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -22,7 +22,6 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicNameValuePair;
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -56,9 +55,9 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
         adapter = new SimpleAdapter(this,
                 data,
                 android.R.layout.simple_list_item_2,
-                new String[] {"user", "message"},
-                new int[] {android.R.id.text1, android.R.id.text2});
-        ListView l = (ListView)findViewById(R.id.listView);
+                new String[]{"user", "message"},
+                new int[]{android.R.id.text1, android.R.id.text2});
+        ListView l = (ListView) findViewById(R.id.listView);
         l.setAdapter(adapter);
         LoadMessageTask task = new LoadMessageTask();
         task.execute();
@@ -71,6 +70,11 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
 
     @Override
     public void run() {
+        Toast t = Toast.makeText(this.getApplicationContext(), "Refreshing Timeline", Toast.LENGTH_SHORT);
+        t.show();
+        handler.postDelayed(this, 30000); // 10 seconds
+        LoadMessageTask task = new LoadMessageTask();
+        task.execute();
     }
 
     @Override
@@ -80,12 +84,13 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
     }
 
     public void buttonClicked(View v) {
-        EditText etMessage = (EditText)findViewById(R.id.etMessage);
+        EditText etMessage = (EditText) findViewById(R.id.etMessage);
         String message = etMessage.getText().toString().trim();
         if (message.length() > 0) {
             PostMessageTask p = new PostMessageTask();
             p.execute(user, message);
         }
+        etMessage.setText("");
     }
 
 
@@ -105,7 +110,8 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_refresh) {
-
+            LoadMessageTask task = new LoadMessageTask();
+            task.execute();
             return true;
         }
 
@@ -121,10 +127,10 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
             String line;
 
             try {
-                Log.e("LoadMessageTask", ""+ timestamp);
+                Log.e("LoadMessageTask", "" + timestamp);
                 URL u = new URL("http://ict.siit.tu.ac.th/~cholwich/microblog/fetch.php?time="
                         + timestamp);
-                HttpURLConnection h = (HttpURLConnection)u.openConnection();
+                HttpURLConnection h = (HttpURLConnection) u.openConnection();
                 h.setRequestMethod("GET");
                 h.setDoInput(true);
                 h.connect();
@@ -132,7 +138,7 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
                 int response = h.getResponseCode();
                 if (response == 200) {
                     reader = new BufferedReader(new InputStreamReader(h.getInputStream()));
-                    while((line = reader.readLine()) != null) {
+                    while ((line = reader.readLine()) != null) {
                         buffer.append(line);
                     }
 
@@ -145,7 +151,20 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
                     //item.put("message", m);
                     //data.add(0, item);
                     JSONObject json = new JSONObject(buffer.toString());
+                    //JSONObject timestamp_json = json.getJSONObject("timestamp");
+                    //timestamp = timestamp_json.getInt("")
+                    timestamp = json.getInt("timestamp");
+                    Log.d("xxx", timestamp + "----lll");
+                    for (int i = 0; i < json.getJSONArray("msg").length(); i++) {
+                        String user = json.getJSONArray("msg").getJSONObject(i).getString("user");
+                        String message = json.getJSONArray("msg").getJSONObject(i).getString("message");
 
+                        Map<String, String> item = new HashMap<String, String>();
+                        item.put("user", user);
+                        item.put("message", message);
+                        data.add(0, item);
+                    }
+                    return true;
                 }
             } catch (MalformedURLException e) {
                 Log.e("LoadMessageTask", "Invalid URL");
@@ -163,7 +182,7 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
                 adapter.notifyDataSetChanged();
                 lastUpdate = System.currentTimeMillis();
                 Toast t = Toast.makeText(MessageActivity.this.getApplicationContext(),
-                        "Updated the timeline",
+                        "Timeline Updated",
                         Toast.LENGTH_SHORT);
                 t.show();
             }
@@ -181,9 +200,29 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
             HttpClient h = new DefaultHttpClient();
             HttpPost p = new HttpPost("http://ict.siit.tu.ac.th/~cholwich/microblog/post.php");
 
+            List<NameValuePair> values = new ArrayList<NameValuePair>();
+            values.add(new BasicNameValuePair("user", user));
+            values.add(new BasicNameValuePair("message", message));
+            try {
+                p.setEntity(new UrlEncodedFormEntity(values));
+                HttpResponse response = h.execute(p);
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(response.getEntity().getContent()));
+                while ((line = reader.readLine()) != null) {
+                    buffer.append(line);
+                }
+                return true;
+            } catch (UnsupportedEncodingException e) {
+                Log.e("Error", "Invalid encoding");
+            } catch (ClientProtocolException e) {
+                Log.e("Error", "Error in posting a message");
+            } catch (IOException e) {
+                Log.e("Error", "I/O Exception");
+            }
 
 
             return false;
+
         }
 
         @Override
@@ -193,8 +232,9 @@ public class MessageActivity extends ActionBarActivity implements Runnable {
                         "Successfully post your status",
                         Toast.LENGTH_SHORT);
                 t.show();
-            }
-            else {
+                LoadMessageTask task = new LoadMessageTask();
+                task.execute();
+            } else {
                 Toast t = Toast.makeText(MessageActivity.this.getApplicationContext(),
                         "Unable to post your status",
                         Toast.LENGTH_SHORT);
